@@ -1,0 +1,93 @@
+#include <ESP8266WiFi.h>
+#include <WiFiClient.h>
+#include <ESP8266WebServer.h>
+
+#include "index.h"                      //Our HTML webpage contents with javascripts
+
+// Minimal number of millisecond between reed switch changes to prevent bounce
+#define reedRes 200UL
+
+//SSID and Password of your WiFi router
+const char* ssid = "BSNL_AP";
+const char* password = "spot$toulouse";
+
+ESP8266WebServer server(80);           //Server on port 80
+
+int dist;
+float sped;
+volatile int stat =1,count;
+volatile unsigned long prev_time,starttime,sptime;
+
+void handleRoot() {
+ String s = MAIN_page; //Read HTML contents
+ server.send(200, "text/html", s); //Send web page
+}
+void setload() {
+String t_state = server.arg("loadstate"); //Refer  xhttp.open("GET", "setLED?LEDstate="+led, true);
+Serial.print(t_state);
+int t = t_state.toInt();
+Serial.print(t);
+switch (t){
+     case 1: digitalWrite(LED_BUILTIN,HIGH);
+        break;
+     case 2: digitalWrite(LED_BUILTIN,LOW);
+        break;
+            }
+server.send(200,"text/plane","{ \"t0\":"+String(count)+", \"t1\":"+String(dist)+", \"t2\":"+String(sped)+", \"t3\":"+String(stat)+" }");
+}
+
+
+ void states() {
+server.send(200,"text/plane","{ \"t0\":"+String(count)+", \"t1\":"+String(dist)+", \"t2\":"+String(sped)+", \"t3\":"+String(stat)+" }");
+}
+
+void setup() {
+  Serial.begin(115200);
+  // put your setup code here, to run once:
+  WiFi.begin(ssid, password);     //Connect to your WiFi router
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+        }
+  server.on("/", handleRoot);           //Which routine to handle at root location. This is display page
+  server.on("/getstatus", states);
+  server.on("/setLoad", setload);
+  server.begin();                       //Start server
+  pinMode(LED_BUILTIN, OUTPUT);
+  attachInterrupt(digitalPinToInterrupt(2), rising, RISING);
+    
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  server.handleClient();          //Handle client requests
+  noInterrupts();
+  dist = (count * 76)/100;
+  if (count >0){
+    sped = 2772.00 / float(sptime);
+  }
+  else{
+    sped = 0;
+  }
+  if ((millis() - prev_time) > 5000UL){
+    stat = 2;
+    count = 0;
+    dist = 0;
+    starttime = 0;
+    delay(100);
+  }
+  interrupts();
+
+  /*
+  */
+}
+ICACHE_RAM_ATTR void rising() {
+  if (millis() - prev_time > reedRes){
+  sptime = millis() - prev_time;
+  prev_time = millis();
+  if (stat == 0 ){ stat =1;} //FIRST START
+  if (stat == 2 ){ stat =0;} //RESET STAT
+       //taking starting time and toggle flag
+  count++;
+  }
+}
